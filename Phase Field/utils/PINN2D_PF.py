@@ -27,29 +27,38 @@ class CalculateUPhi:
         
         # Phase field parameters
         self.cEnerg = 2.7 # Critical energy release rate of the material
-        self.B = 92
+        # this is the BC, you can choose what ever you like. 
+        # This BC is phi ~= 0.98. No crack at the start but it surely cracks in the first step.
+        # why? -> this is because we wanna see changes from state without crack to  with crack.
+        self.B = 92 # and also you cannot specify phi=1 for BC because of the formulation. B=1/(1-phi)
         self.l = model['l']
         
-        self.lb = model['lb']
-        self.ub = model['ub']    
+        self.lb = model['lb'] # used for input normalization input will first be transformed into [-1, +1]
+        self.ub = model['ub'] # used for input normalization
         
         self.layers = NN_param['layers']
         self.data_type = NN_param['data_type']
         self.weights, self.biases = self.initialize_NN(self.layers)
         
         # tf Placeholders        
-        self.x_f_tf = tf.placeholder(self.data_type)
-        self.y_f_tf = tf.placeholder(self.data_type)
-        self.wt_f_tf = tf.placeholder(self.data_type)
-        self.hist_tf = tf.placeholder(self.data_type)
-        self.vdelta_tf = tf.placeholder(self.data_type)
+        self.x_f_tf = tf.placeholder(self.data_type) # internal sampling point coordinate x
+        self.y_f_tf = tf.placeholder(self.data_type) # internal sampling point coordinate y
+        self.wt_f_tf = tf.placeholder(self.data_type) # weight (this time only area. no line elements for traction (no traction BC))
+        self.hist_tf = tf.placeholder(self.data_type) # 
+        self.vdelta_tf = tf.placeholder(self.data_type) # displacement BC data
         
         # tf Graphs        
+        # energy_u: elastic term, energy_phi: crack term, hist: maximum positive straian energy
+        # all of them are energy 'density'. 
         self.energy_u_pred, self.energy_phi_pred, self.hist_pred = \
-            self.net_energy(self.x_f_tf,self.y_f_tf, self.hist_tf,self.vdelta_tf)
+            self.net_energy(self.x_f_tf,self.y_f_tf, self.hist_tf,self.vdelta_tf) # net_energy will be implemented in the derived class
+        # u, v : displacement
         self.u_pred, self.v_pred = self.net_uv(self.x_f_tf,self.y_f_tf,self.vdelta_tf)
+        # phase field
         self.phi_pred = self.net_phi(self.x_f_tf,self.y_f_tf)
+        # just for checking BC traction residual. Not used during trainign
         self.traction_pred = self.net_traction(self.x_f_tf,self.y_f_tf,self.vdelta_tf)
+        # just for checking body force residual.
         self.f_u_pred, self.f_v_pred = self.net_f(self.x_f_tf,self.y_f_tf,self.vdelta_tf)
         
         # Loss
@@ -89,7 +98,8 @@ class CalculateUPhi:
     def neural_net(self,X,weights,biases):
         num_layers = len(weights) + 1
 
-        H = 2.0 * (X - self.lb) / (self.ub - self.lb) - 1.0
+        # Normalize the inpute value to the range [-1, +1]
+        H = 2.0 * (X - self.lb) / (self.ub - self.lb) - 1.0 
         for l in range(0, num_layers - 2):
             W = weights[l]
             b = biases[l]
@@ -113,6 +123,7 @@ class CalculateUPhi:
         shape = tf.shape(x)
         init_hist = tf.zeros((shape[0],shape[1]), dtype = np.float32)
         dist = tf.where(x > self.crackTip, tf.sqrt((x-0.5)**2 + (y-0.5)**2), tf.abs(y-0.5))
+        # With tf.where function, you can specify only near the crack
         init_hist = tf.where(dist < 0.5*self.l, self.B*self.cEnerg*0.5*(1-(2*dist/self.l))/self.l, init_hist)
         
         return init_hist
@@ -128,6 +139,9 @@ class CalculateUPhi:
         lambda2 = 0.5*(u_x + v_y) - 0.5*M
         
         eigSum = (lambda1 + lambda2)        
+        # Strain energy (Positive value) 
+        # 0.125 is the 1/8 in the equation. Decimals are faster than fractions.
+        # And 0.25 = 1/4.
         sEnergy_pos = 0.125*self.lamda * (eigSum + tf.abs(eigSum))**2 + \
         0.25*self.mu*((lambda1 + tf.abs(lambda1))**2 + (lambda2 + tf.abs(lambda2))**2)        
         
@@ -137,10 +151,14 @@ class CalculateUPhi:
         return hist
     
     def net_f(self,x,y,vdelta):
-
+        """ Calculate rasidual of the governing equation.
+        for checking the residual of left side of the governing equation.
+        This has to be equal to the body force (right side of the PDE).
+        """
         u, v = self.net_uv(x,y,vdelta)
         phi = self.net_phi(x,y)
-        
+
+        # stress degradation function
         g = (1-phi)**2        
 
         u_x = tf.gradients(u,x)[0]
@@ -152,6 +170,7 @@ class CalculateUPhi:
         v_x = tf.gradients(v,x)[0]
         v_xy = tf.gradients(v_x,y)[0]
 
+        # unit of body force. This is the left hand side of the Eq.(1) from Goswami 2019.
         f_u = -g*(self.c11*u_xx + self.c12*v_yx + self.c33*u_yy + self.c33*v_xy)
 
         u_xy = tf.gradients(u_x,y)[0]
@@ -164,7 +183,7 @@ class CalculateUPhi:
         return f_u, f_v 
     
     def net_traction(self,x,y,vdelta):
-        
+        """ used to check shear stress at the bottom (must be zero because of the roller support) """
         u, v = self.net_uv(x,y,vdelta)
         u_x = tf.gradients(u,x)[0]
         v_y = tf.gradients(v,y)[0]

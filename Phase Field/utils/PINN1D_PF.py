@@ -13,7 +13,7 @@ class CalculateUPhi:
         self.lb = lb
         self.ub = ub
                
-        self.B = 1000.0
+        self.B = 1000.0 # this means phi ~= 0.99 on initial crack. ()
         self.cEnerg = 2.7
         self.E = 1.0
         self.crackLoc = 0.0

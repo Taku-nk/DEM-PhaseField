@@ -6,7 +6,7 @@
 import tensorflow as tf
 import numpy as np
 import matplotlib as mpl
-mpl.rcParams['figure.dpi'] = 200
+# mpl.rcParams['figure.dpi'] = 200
 import time
 import os
 from utils.PINN1D_PF import CalculateUPhi
@@ -70,14 +70,15 @@ if __name__ == "__main__":
     filename = 'Training_scatter'
     scatterPlot(X_f,figHeight,figWidth,filename)
 
-    l = 0.0125
+    l = 0.0125 # length parameter
     # Domain bounds
     lb = np.array([-1.0])
     ub = np.array([1.0])    
     layers = [1, 50, 50, 50, 2]
     
+    # xSpace is just for the prediction/validation.
     xLeft = np.transpose(np.array([np.linspace(-1.0, -0.25, 100)]))
-    xCenter = np.transpose(np.array([np.linspace(-0.25, 0.25, 400)]))
+    xCenter = np.transpose(np.array([np.linspace(-0.25, 0.25, 400)])) # near the crack must be dense
     xRight = np.transpose(np.array([np.linspace(0.25, 1.0, 100)]))
     xSpace = np.concatenate((xLeft, xCenter, xRight),axis = 0)
 
@@ -105,6 +106,7 @@ if __name__ == "__main__":
             errElem[iElem] = np.sum(res_err[ptIndStart:ptIndEnd]*X_f[ptIndStart:ptIndEnd,1])
             
         # Marking the elements for refinement
+        # Refine only where the error is high
         N = 10 # N percent interior points with highest error
         ntop = np.int(np.round(numElem*N/100))
         sort_err_ind = np.argsort(-errElem, axis=0) 

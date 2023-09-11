@@ -1,4 +1,4 @@
-# Implements the fourth-order phase field to study the growth of fracture in a two dimensional plate
+# Implements the fourth (seocnd?)-order phase field to study the growth of fracture in a two dimensional plate
 # The plate has initial crack and is under tensile loading
 # Load the data file for the final refined domain to obtain the crack path
 
@@ -46,7 +46,7 @@ class PINN_PF(CalculateUPhi):
         return u, v
     
     def net_hist(self,x,y):
-        
+        """returns initial history (dimension of positive strain energy density) function """
         shape = tf.shape(x)
         self.crackTip = 0.5
         init_hist = tf.zeros((shape[0],shape[1]), dtype = np.float32)
@@ -56,7 +56,7 @@ class PINN_PF(CalculateUPhi):
         return init_hist
     
     def net_energy(self,x,y,hist,vdelta):
-
+        """ hist = hist_f in the source. (maximum history positive strain energy density)"""
         u, v = self.net_uv(x,y,vdelta)
         phi = self.net_phi(x,y)
         
